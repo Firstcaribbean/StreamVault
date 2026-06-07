@@ -11,6 +11,7 @@ import PlayerModal from "./components/PlayerModal.jsx";
 import SearchPage from "./components/SearchPage.jsx";
 import Toast from "./components/Toast.jsx";
 import { mockData } from "./data/mockData.js";
+import { getTrendingCatalog, hasTmdbApiKey } from "./services/tmdb.js";
 
 function PageShell({ children, viewKey }) {
   return (
@@ -94,6 +95,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [catalog, setCatalog] = useState(mockData);
 
   useEffect(() => {
     document.title = activeView === "home" ? "StreamVault" : `StreamVault - ${activeView}`;
@@ -105,13 +107,33 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const featuredItems = useMemo(() => mockData.filter((item) => item.isTrending).slice(0, 6), []);
+  useEffect(() => {
+    if (!hasTmdbApiKey()) return undefined;
+
+    let active = true;
+
+    getTrendingCatalog()
+      .then((items) => {
+        if (active && items.length) {
+          setCatalog(items);
+        }
+      })
+      .catch((error) => {
+        console.warn(error.message);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const featuredItems = useMemo(() => catalog.filter((item) => item.isTrending).slice(0, 6), [catalog]);
   const relatedItems = useMemo(() => {
-    if (!selectedItem) return mockData.slice(0, 4);
-    return mockData
+    if (!selectedItem) return catalog.slice(0, 4);
+    return catalog
       .filter((item) => item.id !== selectedItem.id && item.genre.some((genre) => selectedItem.genre.includes(genre)))
       .slice(0, 6);
-  }, [selectedItem]);
+  }, [catalog, selectedItem]);
 
   const handleWatch = useCallback((item) => {
     setSelectedItem(item);
@@ -128,32 +150,32 @@ export default function App() {
         title: "Continue Watching",
         kicker: "Resume in one click",
         showProgress: true,
-        items: mockData.filter((item) => item.progress).sort((a, b) => b.progress - a.progress),
+        items: catalog.filter((item) => item.progress).sort((a, b) => b.progress - a.progress),
       },
-      { title: "Trending Now", items: mockData.filter((item) => item.isTrending).sort((a, b) => a.rank - b.rank) },
-      { title: "New Releases", items: mockData.filter((item) => item.isNew).sort((a, b) => b.year - a.year) },
-      { title: "Top Rated on StreamVault", items: [...mockData].sort((a, b) => b.rating - a.rating).slice(0, 18) },
-      { title: "From Netflix Originals", items: mockData.filter((item) => item.platform === "Netflix") },
-      { title: "From Prime Video", items: mockData.filter((item) => item.platform === "Prime") },
-      { title: "From Disney+ Vault", items: mockData.filter((item) => item.platform === "Disney+") },
+      { title: "Trending Now", items: catalog.filter((item) => item.isTrending).sort((a, b) => a.rank - b.rank) },
+      { title: "New Releases", items: catalog.filter((item) => item.isNew).sort((a, b) => Number(b.year || 0) - Number(a.year || 0)) },
+      { title: "Top Rated on StreamVault", items: [...catalog].sort((a, b) => Number(b.rating) - Number(a.rating)).slice(0, 18) },
+      { title: "Movies From TMDB", items: catalog.filter((item) => item.type === "Movie").slice(0, 18) },
+      { title: "Series From TMDB", items: catalog.filter((item) => item.type === "Series").slice(0, 18) },
+      { title: "Fresh Picks", items: catalog.filter((item) => item.isNew || item.isTrending).slice(0, 18) },
       {
         title: "Recommended For You",
         kicker: "AI-personalized label",
-        items: mockData.filter((item) => item.rating >= 7.5 && ["Sci-Fi", "Action", "Drama", "Anime"].some((genre) => item.genre.includes(genre))).slice(0, 20),
+        items: catalog.filter((item) => Number(item.rating) >= 7.5 && ["Sci-Fi", "Action", "Drama", "Anime"].some((genre) => item.genre.includes(genre))).slice(0, 20),
       },
       {
         title: "International & Award-Winning",
-        items: mockData.filter((item) => item.genre.includes("Drama") || item.genre.includes("Documentary") || item.genre.includes("Anime")).slice(0, 18),
+        items: catalog.filter((item) => item.genre.includes("Drama") || item.genre.includes("Documentary") || item.genre.includes("Anime")).slice(0, 18),
       },
     ],
-    [],
+    [catalog],
   );
 
   const renderView = () => {
     if (activeView === "movies") {
       return (
         <GenreFilter
-          items={mockData.filter((item) => item.type === "Movie")}
+          items={catalog.filter((item) => item.type === "Movie")}
           title="Movies"
           subtitle="Filter the feature-film vault by genre, platform, and popularity."
           onWatch={handleWatch}
@@ -165,7 +187,7 @@ export default function App() {
     if (activeView === "series") {
       return (
         <GenreFilter
-          items={mockData.filter((item) => item.type === "Series")}
+          items={catalog.filter((item) => item.type === "Series")}
           title="Series"
           subtitle="Binge-ready seasons, anime, limited series, and prestige drama."
           onWatch={handleWatch}
@@ -175,7 +197,7 @@ export default function App() {
     }
 
     if (activeView === "live") {
-      return <LiveTVView items={mockData} onWatch={handleWatch} onAdd={handleAdd} />;
+      return <LiveTVView items={catalog} onWatch={handleWatch} onAdd={handleAdd} />;
     }
 
     if (activeView === "mylist") {
@@ -196,7 +218,7 @@ export default function App() {
         <GridView
           title="New & Hot"
           subtitle="Fresh drops, rising favorites, and titles climbing the free charts."
-          items={mockData.filter((item) => item.isNew || item.isTrending).sort((a, b) => a.rank - b.rank)}
+          items={catalog.filter((item) => item.isNew || item.isTrending).sort((a, b) => a.rank - b.rank)}
           onWatch={handleWatch}
           onAdd={handleAdd}
         />
@@ -206,7 +228,7 @@ export default function App() {
     if (activeView === "search") {
       return (
         <SearchPage
-          items={mockData}
+          items={catalog}
           query={searchTerm}
           setQuery={setSearchTerm}
           debouncedQuery={debouncedSearch}

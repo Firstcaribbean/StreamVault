@@ -1,14 +1,17 @@
-﻿import { motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { SearchX } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { trendingSearches } from "../data/mockData.js";
+import { hasTmdbApiKey, searchMovies } from "../services/tmdb.js";
 import MovieCard from "./MovieCard.jsx";
 import SearchBar from "./SearchBar.jsx";
 
 export default function SearchPage({ items, query, setQuery, debouncedQuery, setDebouncedQuery, onWatch, onAdd }) {
   const [recentChip, setRecentChip] = useState("");
+  const [apiResults, setApiResults] = useState(null);
+  const [searching, setSearching] = useState(false);
 
-  const results = useMemo(() => {
+  const localResults = useMemo(() => {
     const needle = debouncedQuery.trim().toLowerCase();
     if (!needle) return [];
 
@@ -17,6 +20,36 @@ export default function SearchPage({ items, query, setQuery, debouncedQuery, set
       return haystack.includes(needle);
     });
   }, [debouncedQuery, items]);
+
+  useEffect(() => {
+    const needle = debouncedQuery.trim();
+    if (!needle || !hasTmdbApiKey()) {
+      setApiResults(null);
+      setSearching(false);
+      return undefined;
+    }
+
+    let active = true;
+    setSearching(true);
+
+    searchMovies(needle)
+      .then((results) => {
+        if (active) setApiResults(results);
+      })
+      .catch((error) => {
+        console.warn(error.message);
+        if (active) setApiResults(null);
+      })
+      .finally(() => {
+        if (active) setSearching(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [debouncedQuery]);
+
+  const results = apiResults ?? localResults;
 
   const chooseChip = (chip) => {
     setRecentChip(chip);
@@ -68,7 +101,7 @@ export default function SearchPage({ items, query, setQuery, debouncedQuery, set
           <div className="mb-5 flex items-end justify-between gap-3">
             <div>
               <h2 className="font-heading text-4xl text-white">Results for "{debouncedQuery}"</h2>
-              <p className="text-sm text-white/55">{results.length} matching free titles</p>
+              <p className="text-sm text-white/55">{searching ? "Searching TMDB..." : `${results.length} matching free titles`}</p>
             </div>
           </div>
           {results.length ? (
