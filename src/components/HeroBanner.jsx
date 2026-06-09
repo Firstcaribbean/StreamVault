@@ -9,18 +9,25 @@ const grain =
 
 export default function HeroBanner({ items, onWatch, onAdd }) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const featured = items[activeIndex];
+  const featured = items[activeIndex] ?? items[0];
 
   const nextSpotlight = useCallback(() => {
+    if (!items.length) return;
     setActiveIndex((current) => (current + 1) % items.length);
   }, [items.length]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [items]);
 
   useEffect(() => {
     const timer = window.setInterval(nextSpotlight, 6500);
     return () => window.clearInterval(timer);
   }, [nextSpotlight]);
 
-  const spotlightTags = useMemo(() => featured.genre.slice(0, 3), [featured.genre]);
+  const spotlightTags = useMemo(() => featured?.genre.slice(0, 3) ?? [], [featured]);
+
+  if (!featured) return null;
 
   return (
     <section

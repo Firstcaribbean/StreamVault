@@ -65,7 +65,7 @@ function mapTmdbItem(item, index = 0) {
     id: `tmdb-${mediaType}-${item.id}`,
     title: item.title || item.name || "Untitled",
     year: year ? Number(year) : "N/A",
-    rating: Number(item.vote_average || 0).toFixed(1),
+    rating: Number(item.vote_average || 0),
     genre: genres.length ? [...new Set(genres)].slice(0, 3) : ["Drama"],
     platform: "TMDB",
     badge: index < 10 ? "TOP 10" : "HD",
