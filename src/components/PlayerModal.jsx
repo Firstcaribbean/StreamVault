@@ -1,6 +1,7 @@
-﻿import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Captions, Maximize, Pause, Play, Volume2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { getTrailerKey, hasTmdbApiKey } from "../services/tmdb.js";
 
 export default function PlayerModal({ item, onClose, related = [] }) {
   const [playing, setPlaying] = useState(true);
@@ -11,6 +12,8 @@ export default function PlayerModal({ item, onClose, related = [] }) {
   const [showSkipIntro, setShowSkipIntro] = useState(true);
   const [adCountdown, setAdCountdown] = useState(5);
   const [canSkipAd, setCanSkipAd] = useState(false);
+  const [trailerKey, setTrailerKey] = useState(null);
+  const [trailerLoading, setTrailerLoading] = useState(false);
 
   useEffect(() => {
     if (!item) return undefined;
@@ -19,6 +22,8 @@ export default function PlayerModal({ item, onClose, related = [] }) {
     setShowSkipIntro(true);
     setAdCountdown(5);
     setCanSkipAd(false);
+    setTrailerKey(null);
+    setTrailerLoading(false);
 
     const introTimer = window.setTimeout(() => setShowSkipIntro(false), 3000);
     const adTimer = window.setInterval(() => {
@@ -39,12 +44,34 @@ export default function PlayerModal({ item, onClose, related = [] }) {
   }, [item]);
 
   useEffect(() => {
-    if (!item || !playing) return undefined;
+    if (!item || !hasTmdbApiKey() || !item.tmdbId) return undefined;
+
+    let active = true;
+    setTrailerLoading(true);
+
+    getTrailerKey(item)
+      .then((key) => {
+        if (active) setTrailerKey(key);
+      })
+      .catch(() => {
+        if (active) setTrailerKey(null);
+      })
+      .finally(() => {
+        if (active) setTrailerLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [item]);
+
+  useEffect(() => {
+    if (!item || !playing || trailerKey) return undefined;
     const timer = window.setInterval(() => {
       setProgress((current) => (current >= 98 ? 8 : current + 0.55));
     }, 500);
     return () => window.clearInterval(timer);
-  }, [item, playing]);
+  }, [item, playing, trailerKey]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -97,18 +124,36 @@ export default function PlayerModal({ item, onClose, related = [] }) {
             transition={{ type: "spring", stiffness: 220, damping: 24 }}
           >
             <div className="relative min-h-[320px] bg-black lg:min-h-[620px]">
-              <div
-                className="absolute inset-0 opacity-90"
-                style={{
-                  background: `linear-gradient(135deg, rgba(0,0,0,.58), rgba(0,0,0,.15)), radial-gradient(circle at 24% 18%, ${item.accent}88, transparent 34%), url(${item.thumbnail}) center/cover`,
-                }}
-              />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent,rgba(0,0,0,.72))]" />
+              {trailerKey ? (
+                <iframe
+                  title={`${item.title} trailer`}
+                  src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1`}
+                  className="absolute inset-0 h-full w-full"
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <>
+                  <div
+                    className="absolute inset-0 opacity-90"
+                    style={{
+                      background: `linear-gradient(135deg, rgba(0,0,0,.58), rgba(0,0,0,.15)), radial-gradient(circle at 24% 18%, ${item.accent}88, transparent 34%), url(${item.thumbnail}) center/cover`,
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent,rgba(0,0,0,.72))]" />
+                </>
+              )}
               <div className="absolute left-5 top-5 rounded-full border border-white/10 bg-black/50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-white/75 backdrop-blur-xl">
-                Ad - Free access stream
+                {trailerKey ? "Trailer" : "Ad - Free access stream"}
               </div>
 
-              {showSkipIntro ? (
+              {trailerLoading ? (
+                <div className="absolute left-5 top-16 rounded-full border border-white/10 bg-black/50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-white/75 backdrop-blur-xl">
+                  Loading trailer
+                </div>
+              ) : null}
+
+              {showSkipIntro && !trailerKey ? (
                 <button
                   type="button"
                   onClick={() => setShowSkipIntro(false)}
@@ -118,32 +163,36 @@ export default function PlayerModal({ item, onClose, related = [] }) {
                 </button>
               ) : null}
 
-              <div className="absolute right-5 top-16">
-                {canSkipAd ? (
+              {!trailerKey ? (
+                <div className="absolute right-5 top-16">
+                  {canSkipAd ? (
+                    <button
+                      type="button"
+                      onClick={() => setCanSkipAd(false)}
+                      className="rounded-full border border-molten/50 bg-molten/20 px-4 py-2 text-sm font-black uppercase tracking-[0.14em] text-molten shadow-gold-glow transition hover:bg-molten hover:text-black focus-visible:focus-ring"
+                    >
+                      Skip Ad
+                    </button>
+                  ) : (
+                    <span className="rounded-full border border-white/10 bg-black/45 px-4 py-2 text-sm font-bold text-white/70 backdrop-blur-xl">
+                      Skip Ad in {adCountdown}s
+                    </span>
+                  )}
+                </div>
+              ) : null}
+
+              {!trailerKey ? (
+                <div className="absolute inset-0 grid place-items-center">
                   <button
                     type="button"
-                    onClick={() => setCanSkipAd(false)}
-                    className="rounded-full border border-molten/50 bg-molten/20 px-4 py-2 text-sm font-black uppercase tracking-[0.14em] text-molten shadow-gold-glow transition hover:bg-molten hover:text-black focus-visible:focus-ring"
+                    onClick={() => setPlaying((current) => !current)}
+                    className="grid h-20 w-20 place-items-center rounded-full border border-white/15 bg-white/10 text-white shadow-glow backdrop-blur-xl transition hover:scale-110 hover:bg-vault/70 focus-visible:focus-ring"
+                    aria-label={playing ? "Pause video" : "Play video"}
                   >
-                    Skip Ad
+                    {playing ? <Pause className="h-10 w-10 fill-current" /> : <Play className="h-10 w-10 fill-current" />}
                   </button>
-                ) : (
-                  <span className="rounded-full border border-white/10 bg-black/45 px-4 py-2 text-sm font-bold text-white/70 backdrop-blur-xl">
-                    Skip Ad in {adCountdown}s
-                  </span>
-                )}
-              </div>
-
-              <div className="absolute inset-0 grid place-items-center">
-                <button
-                  type="button"
-                  onClick={() => setPlaying((current) => !current)}
-                  className="grid h-20 w-20 place-items-center rounded-full border border-white/15 bg-white/10 text-white shadow-glow backdrop-blur-xl transition hover:scale-110 hover:bg-vault/70 focus-visible:focus-ring"
-                  aria-label={playing ? "Pause video" : "Play video"}
-                >
-                  {playing ? <Pause className="h-10 w-10 fill-current" /> : <Play className="h-10 w-10 fill-current" />}
-                </button>
-              </div>
+                </div>
+              ) : null}
 
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/88 to-transparent p-4 sm:p-6">
                 <div className="mb-4 flex items-center gap-3">
@@ -216,7 +265,9 @@ export default function PlayerModal({ item, onClose, related = [] }) {
             </div>
 
             <aside className="max-h-[92vh] overflow-y-auto border-t border-white/10 bg-white/[0.04] p-5 backdrop-blur-xl lg:border-l lg:border-t-0">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-vault-light">{item.platform} - {item.badge}</p>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-vault-light">
+                {item.platform} - {item.badge}
+              </p>
               <h2 className="mt-3 font-heading text-5xl leading-none text-white">{item.title}</h2>
               <p className="mt-4 text-sm leading-6 text-white/70">{item.synopsis}</p>
               <div className="mt-5 grid grid-cols-3 gap-2 rounded-lg border border-white/10 bg-black/20 p-3 text-center">
@@ -251,7 +302,9 @@ export default function PlayerModal({ item, onClose, related = [] }) {
                       <img src={candidate.thumbnail} alt="" className="h-20 w-14 rounded-md object-cover" />
                       <div>
                         <p className="font-bold text-white">{candidate.title}</p>
-                        <p className="text-xs text-white/55">{candidate.year} - {candidate.genre.join(", ")}</p>
+                        <p className="text-xs text-white/55">
+                          {candidate.year} - {candidate.genre.join(", ")}
+                        </p>
                       </div>
                     </div>
                   ))}

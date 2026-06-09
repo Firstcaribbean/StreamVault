@@ -63,6 +63,8 @@ function mapTmdbItem(item, index = 0) {
 
   return {
     id: `tmdb-${mediaType}-${item.id}`,
+    tmdbId: item.id,
+    mediaType,
     title: item.title || item.name || "Untitled",
     year: year ? Number(year) : "N/A",
     rating: Number(item.vote_average || 0),
@@ -96,4 +98,15 @@ export async function getTrendingCatalog() {
   return data.results
     .filter((item) => ["movie", "tv"].includes(item.media_type) && item.poster_path)
     .map(mapTmdbItem);
+}
+
+export async function getTrailerKey(item) {
+  const tmdbId = item?.tmdbId;
+  const mediaType = item?.mediaType || (item?.type === "Series" ? "tv" : "movie");
+
+  if (!tmdbId || !apiKey) return null;
+
+  const data = await requestTmdb(`/${mediaType}/${tmdbId}/videos`);
+  const candidate = data.results.find((video) => video.site === "YouTube" && (video.type === "Trailer" || video.type === "Teaser")) || data.results.find((video) => video.site === "YouTube");
+  return candidate?.key ?? null;
 }
