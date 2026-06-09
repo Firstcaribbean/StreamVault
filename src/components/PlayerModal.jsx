@@ -9,11 +9,14 @@ export default function PlayerModal({ item, onClose, related = [] }) {
   const [progress, setProgress] = useState(12);
   const [quality, setQuality] = useState("1080p");
   const [captions, setCaptions] = useState(true);
+  const [playbackMode, setPlaybackMode] = useState("trailer");
   const [showSkipIntro, setShowSkipIntro] = useState(true);
   const [adCountdown, setAdCountdown] = useState(5);
   const [canSkipAd, setCanSkipAd] = useState(false);
   const [trailerKey, setTrailerKey] = useState(null);
   const [trailerLoading, setTrailerLoading] = useState(false);
+  const fullMovieSource = item?.fullMovieUrl || item?.streamUrl || item?.movieUrl || null;
+  const hasFullMovie = Boolean(fullMovieSource);
 
   useEffect(() => {
     if (!item) return undefined;
@@ -22,6 +25,7 @@ export default function PlayerModal({ item, onClose, related = [] }) {
     setShowSkipIntro(true);
     setAdCountdown(5);
     setCanSkipAd(false);
+    setPlaybackMode("trailer");
     setTrailerKey(null);
     setTrailerLoading(false);
 
@@ -44,7 +48,7 @@ export default function PlayerModal({ item, onClose, related = [] }) {
   }, [item]);
 
   useEffect(() => {
-    if (!item || !hasTmdbApiKey() || !item.tmdbId) return undefined;
+    if (!item || playbackMode !== "trailer" || !hasTmdbApiKey() || !item.tmdbId) return undefined;
 
     let active = true;
     setTrailerLoading(true);
@@ -63,15 +67,15 @@ export default function PlayerModal({ item, onClose, related = [] }) {
     return () => {
       active = false;
     };
-  }, [item]);
+  }, [item, playbackMode]);
 
   useEffect(() => {
-    if (!item || !playing || trailerKey) return undefined;
+    if (!item || !playing || trailerKey || playbackMode === "movie") return undefined;
     const timer = window.setInterval(() => {
       setProgress((current) => (current >= 98 ? 8 : current + 0.55));
     }, 500);
     return () => window.clearInterval(timer);
-  }, [item, playing, trailerKey]);
+  }, [item, playing, trailerKey, playbackMode]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -124,7 +128,36 @@ export default function PlayerModal({ item, onClose, related = [] }) {
             transition={{ type: "spring", stiffness: 220, damping: 24 }}
           >
             <div className="relative min-h-[320px] bg-black lg:min-h-[620px]">
-              {trailerKey ? (
+              {playbackMode === "movie" ? (
+                hasFullMovie ? (
+                  <iframe
+                    title={`${item.title} full movie`}
+                    src={fullMovieSource}
+                    className="absolute inset-0 h-full w-full"
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <>
+                    <div
+                      className="absolute inset-0 opacity-90"
+                      style={{
+                        background: `linear-gradient(135deg, rgba(0,0,0,.58), rgba(0,0,0,.15)), radial-gradient(circle at 24% 18%, ${item.accent}88, transparent 34%), url(${item.thumbnail}) center/cover`,
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent,rgba(0,0,0,.72))]" />
+                    <div className="absolute inset-0 grid place-items-center p-6 text-center">
+                      <div className="max-w-md rounded-xl border border-white/10 bg-black/50 p-5 backdrop-blur-xl">
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-vault-light">Full movie source missing</p>
+                        <h3 className="mt-2 font-heading text-4xl text-white">No licensed stream attached</h3>
+                        <p className="mt-3 text-sm leading-6 text-white/70">
+                          Add `fullMovieUrl`, `streamUrl`, or `movieUrl` to this item with a real licensed source, and the full movie button will play it here.
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )
+              ) : trailerKey ? (
                 <iframe
                   title={`${item.title} trailer`}
                   src={`https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1`}
@@ -144,7 +177,7 @@ export default function PlayerModal({ item, onClose, related = [] }) {
                 </>
               )}
               <div className="absolute left-5 top-5 rounded-full border border-white/10 bg-black/50 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-white/75 backdrop-blur-xl">
-                {trailerKey ? "Trailer" : "Ad - Free access stream"}
+                {playbackMode === "movie" ? "Full Movie" : trailerKey ? "Trailer" : "Ad - Free access stream"}
               </div>
 
               {trailerLoading ? (
@@ -153,7 +186,7 @@ export default function PlayerModal({ item, onClose, related = [] }) {
                 </div>
               ) : null}
 
-              {showSkipIntro && !trailerKey ? (
+              {showSkipIntro && playbackMode !== "movie" && !trailerKey ? (
                 <button
                   type="button"
                   onClick={() => setShowSkipIntro(false)}
@@ -163,7 +196,7 @@ export default function PlayerModal({ item, onClose, related = [] }) {
                 </button>
               ) : null}
 
-              {!trailerKey ? (
+              {playbackMode !== "movie" && !trailerKey ? (
                 <div className="absolute right-5 top-16">
                   {canSkipAd ? (
                     <button
@@ -181,7 +214,7 @@ export default function PlayerModal({ item, onClose, related = [] }) {
                 </div>
               ) : null}
 
-              {!trailerKey ? (
+              {playbackMode !== "movie" && !trailerKey ? (
                 <div className="absolute inset-0 grid place-items-center">
                   <button
                     type="button"
@@ -194,7 +227,8 @@ export default function PlayerModal({ item, onClose, related = [] }) {
                 </div>
               ) : null}
 
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/88 to-transparent p-4 sm:p-6">
+              {playbackMode !== "movie" ? (
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/88 to-transparent p-4 sm:p-6">
                 <div className="mb-4 flex items-center gap-3">
                   <span className="w-12 text-xs font-bold text-white/70">{Math.floor(progress / 3)}:{Math.floor(progress % 3) * 20 || "00"}</span>
                   <input
@@ -261,7 +295,8 @@ export default function PlayerModal({ item, onClose, related = [] }) {
                     <Maximize className="h-5 w-5" />
                   </button>
                 </div>
-              </div>
+                </div>
+              ) : null}
             </div>
 
             <aside className="max-h-[92vh] overflow-y-auto border-t border-white/10 bg-white/[0.04] p-5 backdrop-blur-xl lg:border-l lg:border-t-0">
@@ -269,6 +304,26 @@ export default function PlayerModal({ item, onClose, related = [] }) {
                 {item.platform} - {item.badge}
               </p>
               <h2 className="mt-3 font-heading text-5xl leading-none text-white">{item.title}</h2>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPlaybackMode("trailer")}
+                  className={`rounded-full border px-4 py-2 text-sm font-bold transition focus-visible:focus-ring ${
+                    playbackMode === "trailer" ? "border-vault bg-vault text-white shadow-glow" : "border-white/10 bg-white/[0.06] text-white/75 hover:border-vault/50 hover:text-white"
+                  }`}
+                >
+                  Play Trailer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPlaybackMode("movie")}
+                  className={`rounded-full border px-4 py-2 text-sm font-bold transition focus-visible:focus-ring ${
+                    playbackMode === "movie" ? "border-molten bg-molten text-black shadow-gold-glow" : "border-white/10 bg-white/[0.06] text-white/75 hover:border-molten/50 hover:text-white"
+                  }`}
+                >
+                  Play Full Movie
+                </button>
+              </div>
               <p className="mt-4 text-sm leading-6 text-white/70">{item.synopsis}</p>
               <div className="mt-5 grid grid-cols-3 gap-2 rounded-lg border border-white/10 bg-black/20 p-3 text-center">
                 <div>
